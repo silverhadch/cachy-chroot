@@ -4,7 +4,7 @@ pub trait BlockOrSubvolumeID {
     fn get_id(&self) -> String;
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct BlockDevice {
     pub name: String,
     #[serde(rename = "fstype")]
@@ -13,21 +13,39 @@ pub struct BlockDevice {
     pub partuuid: Option<String>,
     pub label: Option<String>,
     pub partlabel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zpool_name: Option<String>,
 }
 
 impl std::fmt::Display for BlockDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Partition: {}: FS: {} UUID: {}", self.name, self.fs_type, self.uuid)
+        if let Some(pool_name) = &self.zpool_name {
+            write!(
+                f,
+                "Partition: {}: FS: {} (ZFS pool: {}) UUID: {}",
+                self.name, self.fs_type, pool_name, self.uuid
+            )
+        } else {
+            write!(
+                f,
+                "Partition: {}: FS: {} UUID: {}",
+                self.name, self.fs_type, self.uuid
+            )
+        }
     }
 }
 
 impl BlockOrSubvolumeID for BlockDevice {
     fn get_id(&self) -> String {
-        self.uuid.clone()
+        if self.fs_type == "zfs_member" {
+            self.zpool_name.clone().unwrap_or_else(|| self.uuid.clone())
+        } else {
+            self.uuid.clone()
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BTRFSSubVolume {
     pub device: BlockDevice,
     pub subvolume_id: usize,
@@ -36,7 +54,11 @@ pub struct BTRFSSubVolume {
 
 impl BTRFSSubVolume {
     pub fn new(device: BlockDevice, subvolume_id: usize, subvolume_name: String) -> Self {
-        BTRFSSubVolume { device, subvolume_id, subvolume_name }
+        BTRFSSubVolume {
+            device,
+            subvolume_id,
+            subvolume_name,
+        }
     }
 }
 
